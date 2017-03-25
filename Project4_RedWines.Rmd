@@ -1,0 +1,292 @@
+---
+title: "Project4_RedWineQuality"
+author: "AJ DeGraw"
+date: "March 22, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# Red Wines Dataset - Exploratory Data Analysis
+
+```{r, echo=FALSE,warning=FALSE}
+
+library(dplyr)
+library(ggplot2)
+library(GGally)
+library(ggvis)
+library(gridExtra)
+library(corrplot)
+
+```
+
+
+
+A stream-of-consciousness analysis and exploration of the data
+
+Load in and have a look at the structure of the entire loan data set.
+```{r}
+#Read in the loan data
+#MACBOOK ADDRESS
+#setwd("/Users/ad755/Dropbox/Udacity/DataAnalystNanoDegree/Project4_R/")
+
+#AOI DESKTOP ADDRESS
+setwd("C:/Users/Admin/Dropbox/Udacity/DataAnalystNanoDegree/Project4_R")
+
+
+wines <- read.csv("wineQualityReds.csv")
+
+#index rows by column X and remove column X
+row.names(wines) <- wines$X
+wines <- wines[-c(1)]
+
+str(wines)
+```
+
+
+```{r}
+#Check for missing (na) values
+wines %>% summarise_each(funs(sum(is.na(.))))
+
+# and dropping the enumerating "X" column
+```
+
+The wines data set is not missing any of the 1599 observations across any of the 12 variables.  This is nice as every wine then will be used in our visual data exploration.
+
+Just going to now get a basic distribution of some of the variables using histograms in ggplot.
+
+```{r}
+ggplot(data=wines)+
+  geom_histogram(aes(alcohol), bins=50)
+
+```
+
+
+```{r}
+ggplot(data=wines)+
+  geom_histogram(aes(quality))
+
+```
+
+
+Since this approach of going through the variables one at a time with histograms, and then two at a time with scatterplots is a bit tedious, an appeal to ggpairs and/or ggvis will give this same information with much less code and time spent.  However, ggvis will not output a dynamic plot to the `knit' html file, so it is just for my exploratory data analysis use in looking for variables that trend together.
+
+```{r, echo=FALSE, warning=FALSE}
+
+ggpairs(data=wines, columns=c(1:5))
+
+```
+
+
+From the ggpairs, the citric.acid and fixed.acidity variables look like they may have some non-zero correlation.  To get an overall correlation matrix:
+
+```{r}
+cor_matrix <- cor(wines)
+round(cor_matrix, 3)
+
+```
+
+This is a lot of information to have in numeric format so a visual representation could help.
+```{r}
+corrplot(cor_matrix, type = "upper", order = "hclust", tl.col="black", diag = FALSE, tl.cex = 0.8, tl.pos = "upper")
+```
+
+The variables that are more highly correlated are represented by larger circles such as the citric.acid and fixed.acidity variables have a larger positive correlation, that looking back at the correlation matrix is approximately 0.672.  This will be looked at in some depth later.
+
+First, a ggvis dynamic plot to sort through visually how some of the variables are related to the quality rating.
+
+```{r}
+wines %>% ggvis(x=input_select(c('alcohol','fixed.acidity','volatile.acidity','citric.acid','residual.sugar','chlorides','free.sulfur.dioxide','total.sulfur.dioxide'), map=as.name)) %>% layer_points(y=~quality)
+
+```
+From the ggvis plots one could see that there is a slight tendency for alcohol and quality to increase together.  From the correlation matrix this can be seen as their correlation is approximately 0.476.
+
+
+Eventhough, alcohol and residual.sugar do not appear to have much correlation, the plot below breaks down the alcohol vs residual.sugar by the quality rating.
+
+```{r, warning=FALSE}
+ggplot(data=wines)+
+  geom_jitter(aes(x=alcohol, y=residual.sugar, color=factor(quality)), alpha=0.5)
+
+```
+
+So it does appear that those wines with both lower residual.sugar and alcohol tend to have a middle quality rating as is illustrated by the large cluster of quality = 5 points in the lower left of the plot.
+
+
+
+```{r, warning=FALSE}
+ggplot(data=wines)+
+  geom_point(aes(x=fixed.acidity, y=citric.acid, color=factor(quality)), alpha=0.5)
+
+```
+
+In the above plot, there appears to be a positive correlation between fixed.acidity and citric.acid.  Looking at the definition of the variables:
+
+fixed acidity: most acids involved with wine or fixed or nonvolatile (do not evaporate readily)
+
+citric acid: found in small quantities, citric acid can add 'freshness' and flavor to wines
+
+As citric acid is considered non-volatile acid  (<a href>https://www.ams.usda.gov/sites/default/files/media/Citric%20Acid%20TR%202015.pdf</a>) it would make sense that fixed.acidity would increase as citric.acid increases since citric.acid is non-volatile and hence a component of the fixed.acidity measurement.
+
+Since the description of the citric acid variable lends one to probably guess that since citric.acid can add freshness and flavor then it might lead to a higher quality rating for the wine.  So a quick scatter plot of citric.acid vs quality can help illuminate that possiblity:
+
+```{r, warning=FALSE}
+ggplot(data=wines)+
+  geom_jitter(aes(x=quality, y=citric.acid), alpha=0.3)
+
+```
+
+Since that is not completely helpful a boxplot might give a better idea.
+
+```{r}
+ggplot(data=group_by(wines, quality))+
+  geom_boxplot(aes(x=quality, y=citric.acid, group = cut_width(quality, 01)), color='red')+
+  geom_jitter(aes(x=quality, y=citric.acid), alpha=0.1)
+
+```
+So there does appear to be an overall trend that the higher quality wines have a higher citric.acid content.  However, the data is rather limitted at the lowest and highest values for quality so a definitive conclusion is with-held.
+
+
+```{r, warning=FALSE}
+ggplot(data=wines)+
+  geom_jitter(aes(x=alcohol, y=residual.sugar, color=factor(quality)), alpha=0.5)+
+  scale_y_log10()
+
+```
+
+```{r, warning=FALSE}
+ggplot(data=subset(wines, quality>6))+
+  geom_jitter(aes(x=alcohol, y=residual.sugar, color=factor(quality)), alpha=0.5)+
+  scale_y_log10()
+
+```
+
+```{r, warning=FALSE}
+ggplot(data=subset(wines, quality <= 5))+
+  geom_jitter(aes(x=alcohol, y=residual.sugar, color=factor(quality)), alpha=0.5)+
+  scale_y_log10()
+
+```
+
+It appears that the wines with the lower ratings are clustered toward the low end of the percent alcohol by volume measurement.  To see if there really is a difference will just perform a quick summary of the data on the subsets if the data are partitioned into lower quality and higher quality (less than 6, or greater than or equal to 6 respectively).
+
+```{r}
+summary(subset(wines, quality <=5)$alcohol)
+summary(subset(wines, quality > 6)$alcohol)
+
+
+```
+
+As there does appear to be some statistically significant difference between alcohol for low and high quality wines, let's see if this is reinforced with a box plot of alcohol conditioned on quality (low vs high).
+
+```{r}
+wines$low_quality = wines$quality <= 5
+
+ggplot(data = wines)+
+  geom_boxplot(aes(x = low_quality, y = alcohol))
+
+```
+A look at the emperical density function conditioned on whether or not low_quality it TRUE could help with our conclusion of whether or not we think the alchool  level affects the quality rating.
+
+
+
+```{r}
+ggplot(data=wines)+
+  geom_density(aes(x = alcohol, color=low_quality))
+ 
+
+```
+```{r}
+ggplot(data=wines)+
+  stat_ecdf(aes(x = alcohol, color=low_quality))+
+  ylab("Cumulative Emperical Probability")
+ 
+
+```
+
+And we could even do a simple test for difference of means to see if there is in fact statistical significance between the mean alcohol measurement of each quality category.  
+
+First check sample sizes to see if there are enough data points in each category for running a test of significance:
+
+
+```{r}
+count(wines, low_quality)
+
+```
+
+So there are plenty of data points in each classification to run a test for difference of means.  Our null hypothesis is that the means are equal: $$H_0: \mu_{lq} = \mu_{hq} \leftrightarrow \mu_{hq} - \mu_{lq} = 0$$ vs the alternative that they are not equal $$ H_1: \mu_{lq} \neq \mu_{hq} \leftrightarrow \mu_{hq} - \mu_{lq} \neq 0$$.
+
+```{r}
+low_q <- subset(wines, low_quality == TRUE)$alcohol
+high_q <- subset(wines, low_quality == FALSE)$alcohol
+```
+
+```{r}
+t.test(low_q, high_q)
+
+```
+With a p-value of 2.2e-16, we can clearly conclude that there is a statistically significant difference in alcohol content between the high and low quality wines.  With such a small p-value we can go even further to conclude that high quality wines generally have a higher alcohol content than low quality wines to replace our null hypothesis.
+
+##2. Final Plots and Summary
+
+### A few "polished"" plots.
+
+
+```{r}
+ggplot(data=wines)+
+  geom_point(aes(x=fixed.acidity, y=citric.acid, color=factor(quality)), alpha=0.5)+
+  stat_smooth(aes(x=fixed.acidity, y=citric.acid))+
+  labs(list(title = "Citric Acid vs Fixed Acidity", x="Fixed Acidity (g/dm^3)",
+            y="Citric Acid (g/dm^3)"))+
+  theme(plot.title = element_text(hjust = 0.5))+
+  scale_colour_discrete(name="Quality")
+
+```
+
+
+```{r}
+ggplot(data=group_by(wines, quality))+
+  geom_boxplot(aes(x=quality, y=citric.acid, group = cut_width(quality, 01)), color='red')+
+  geom_jitter(aes(x=quality, y=citric.acid), alpha=0.1)+  
+  labs(list(title = "Citric Acid Content vs. Quality Rating", x="Quality Rating (0-10)", 
+            y="Citric Acid Content (g/dm^3)"), center=TRUE)+
+  theme(plot.title = element_text(hjust = 0.5))
+
+```
+
+
+
+
+```{r, warning=FALSE}
+a <- ggplot(data=subset(wines, quality>=6))+
+  geom_jitter(aes(x=alcohol, y=residual.sugar, color=factor(quality)), alpha=0.5)+
+  ylim(1,10)+
+  xlim(8,15)+
+  labs(list(title = "High Quality", x="Alcohol (%)", y="Residual Sugar (g/dm^3)"))+
+  theme(plot.title = element_text(hjust = 0.5))+
+  scale_colour_discrete(name="Quality")
+
+
+
+b <- ggplot(data=subset(wines, quality <= 5))+
+  geom_jitter(aes(x=alcohol, y=residual.sugar, color=factor(quality)), alpha=0.5)+
+  ylim(1,10)+
+  xlim(8,15)+
+  labs(list(title = "Low Quality", x="Alcohol (%)", y="Residual Sugar (g/dm^3)"))+
+  theme(plot.title = element_text(hjust = 0.5))+
+  scale_colour_discrete(name="Quality")
+
+grid.arrange(a,b,ncol=1)
+
+```
+
+
+
+## 3. Reflection
+
+
+
+The red wines data set was already clean and was not missing any values so was an easier data set to explore.  Overall, only a few relationships have been explored.  I was looking for variables that appeared to be correlated and so focused on just a few that appeared to be less than randomly related.  There are still many pairs or triples of variables that have not been check for a relationship.  Overall, I was looking for a variable that the 'quality' rating was highly correlated with so that after this analysis, a predictive model could be developed for predicting a quality score based on a subset of the features of the wines.  This model is what I would continue with next, probably first with a basic logistic regression with multiple output categories developed in a supervised learning algorithm.  
