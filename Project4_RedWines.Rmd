@@ -1,87 +1,265 @@
 ---
 title: "Project4_RedWineQuality"
 author: "AJ DeGraw"
-date: "March 22, 2017"
-output: html_document
+date: "April 5, 2017"
+output:
+  html_document: 
+    self_contained: no
+  pdf_document: default
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
 ```
 
 
 # Red Wines Dataset - Exploratory Data Analysis
 
-```{r, echo=FALSE,warning=FALSE}
-
+```{r, packages}
+library(caret)
 library(dplyr)
 library(ggplot2)
 library(GGally)
 library(ggvis)
 library(gridExtra)
 library(corrplot)
+library(car)
+library(e1071)
 
 ```
 
+### Introducing the Data and Intent
+  The data that I am going to investigate is a data set that contains characteristics of various red wines including a quality score.  The first set of exploratory data analysis will pertain to univariate data displays and the second section will focus more on bivariate. Overall, this EDA will be a stream-of-consciousness analysis and exploration of the data.  The goal will be to find find features that have stronger correlation values with each other and in particular features that are correlated highly with the quality score in hopes of developing a predictive model.
 
+#Univariate Plots and Exploration
 
-A stream-of-consciousness analysis and exploration of the data
-
-Load in and have a look at the structure of the entire loan data set.
 ```{r}
 #Read in the loan data
 #MACBOOK ADDRESS
-#setwd("/Users/ad755/Dropbox/Udacity/DataAnalystNanoDegree/Project4_R/")
+setwd("/Users/ad755/Dropbox/Udacity/DataAnalystNanoDegree/Project4_R/")
 
 #AOI DESKTOP ADDRESS
-setwd("C:/Users/Admin/Dropbox/Udacity/DataAnalystNanoDegree/Project4_R")
+#setwd("C:/Users/Admin/Dropbox/Udacity/DataAnalystNanoDegree/Project4_R")
 
 
 wines <- read.csv("wineQualityReds.csv")
 
 #index rows by column X and remove column X
-row.names(wines) <- wines$X
-wines <- wines[-c(1)]
+row.names(wines) <- wines$X 
+wines$X <- NULL
+```
 
+```{r}
+dim(wines)
+```
+
+```{r}
 str(wines)
 ```
+
+
+```{r}
+wines %>% summary()
+```
+
+In total there are 1599 observations of 12 features of the observations are valid.  Before doing any analysis, it is a good idea to check and see how many entries in the dataset are "NA".  The total count of NA in each data feature is below.
 
 
 ```{r}
 #Check for missing (na) values
 wines %>% summarise_each(funs(sum(is.na(.))))
 
-# and dropping the enumerating "X" column
-```
-
-The wines data set is not missing any of the 1599 observations across any of the 12 variables.  This is nice as every wine then will be used in our visual data exploration.
-
-Just going to now get a basic distribution of some of the variables using histograms in ggplot.
-
-```{r}
-ggplot(data=wines)+
-  geom_histogram(aes(alcohol), bins=50)
 
 ```
+
+The red wines data set is not missing any values from the 1599 observations across any of the 12 variables.  This is nice as every wine then will be used in our visual data exploration.
+
+To check the distribution of several of the features that will be probed more deeply and to detect possible outliers, histograms and box plots will be explored.
+
 
 
 ```{r}
-ggplot(data=wines)+
-  geom_histogram(aes(quality))
+
+hist_box_plot <- function(data, feature, bins = 50) {
+  # a single function to plot a histogram and box_plot side by side
+  p1 <- ggplot(aes_string(x = feature), data = data) +
+          geom_histogram(bins = bins)
+
+  p2 <- ggplot(data = data) + 
+          geom_boxplot(aes_string(x = '1', y = feature))
+
+  invisible(grid.arrange(p1, p2, ncol = 2))
+
+  
+}
+
+
+univ_stats <- function(data, feature, feat_sum = TRUE, feat_skew = TRUE) {
+  # a summary that is used repeatedly in the univariate section
+  if (feat_sum) {
+    print.noquote(paste("Summary of ", feature, " feature:"))
+    print(summary(data[[feature]]))
+  }
+  if (feat_skew) {
+    print.noquote(paste("Skewness of", feature, "feature:", skewness(data[[feature]])))
+  }
+}
+
+
+drop_outliers <- function(data, feature) {
+  
+  cutoffs <- quantile(data[[feature]], probs = c(0.25, 0.75))
+  non_outliers <- subset(data, data[[feature]] > cutoffs[1] - 1.5 * (cutoffs[2] - cutoffs[1]))
+  non_outliers <- subset(non_outliers, non_outliers[[feature]] < cutoffs[2] + 1.5 * (cutoffs[2] - cutoffs[1]))
+  return(non_outliers)
+  
+}
+
+
+```
+
+```{r}
+hist_box_plot(data = wines, feature = 'alcohol', bins = 30)
+```
+
+```{r}
+univ_stats(wines, 'alcohol', FALSE, TRUE)
+```
+
+For alcohol content there are some potential outliers on the high side and the data does have a larger skewness value of 0.8592 showing the easily observed positive skewness of the data.
+
+
+```{r}
+hist_box_plot(wines, 'citric.acid', bins = 30)
+```
+
+```{r}
+univ_stats(wines, 'citric.acid', FALSE, TRUE)
+```
+
+For citric acid there only appears to be one outlier at 1.0.  The distribution of citric.acid does seem to be skewed right a bit.  A skewness value of 0.3177403 for citric.acid does show positively skewed data.
+
+```{r}
+hist_box_plot(wines, 'volatile.acidity', bins = 30)
+```
+
+```{r}
+univ_stats(wines, 'volatile.acidity', FALSE, TRUE)
+```
+
+While volatile.acidity does have some high side outliers, the data overall does appear unimodal, with a skewness of 0.67, so another feature that is skewed to the right. 
+
+
+```{r}
+hist_box_plot(wines, 'sulphates', bins = 30)
+```
+
+
+
+```{r}
+univ_stats(wines, 'sulphates', FALSE, TRUE)
+```
+
+
+
+```{r}
+hist_box_plot(wines, 'fixed.acidity', bins = 30)
+```
+
+```{r}
+univ_stats(wines, 'fixed.acidity', FALSE, TRUE)
+```
+
+
+```{r}
+hist_box_plot(wines, 'residual.sugar', bins = 30)
+```
+
+```{r}
+univ_stats(wines, 'residual.sugar', FALSE, TRUE)
+```
+For sulphates, fixed.acidity, and residual.sugar the general distributions are similar: unimodal, skewed right and there are clearly many high side outliers.  These outliers will be cleaned from the data.  The outliers are probably causing the skewness values (sulphates: 2.42, fixed.acidity: 0.98, residual.sugar: 4.53) to be so large.  With the ouliers removed it may be easier to see how the majority of the data is distributed.
+
+### Cleaning Out the Outliers
+
+
+
+The outlier points will be removed from the data and univariate plots redone below. The cutoffs for determining outlier status are whether the point is lower than the (25th percentile - 1.5 * Interquartile Range) or higher than (75th percentile + 1.5 * (interquartile Range)).  The more central data is preserved and the univariate plots (with outliers removed) are shown below.
+
+```{r, fig.height = 3, fig.width = 8}
+wines <- drop_outliers(wines, 'sulphates')
+wines <- drop_outliers(wines, 'residual.sugar')
+wines <- drop_outliers(wines, 'volatile.acidity')
+wines <- drop_outliers(wines, 'fixed.acidity')
+hist_box_plot(wines, 'sulphates', bins = 20)
+hist_box_plot(wines, 'residual.sugar', bins = 20)
+hist_box_plot(wines, 'volatile.acidity', bins = 20)
+hist_box_plot(wines, 'fixed.acidity', bins = 20)
+
+```
+
+```{r}
+univ_stats(wines, 'sulphates', FALSE, TRUE)
+univ_stats(wines, 'residual.sugar', FALSE, TRUE)
+univ_stats(wines, 'volatile.acidity', FALSE, TRUE)
+univ_stats(wines, 'fixed.acidity', FALSE, TRUE)
+```
+With the outliers removed, one can now see the distribution for the bulk of the data for each feature more clearly.  The skewness values for the distributions of sulphates, residual.sugar, volatile.acidity, and fixed.acidity were all reduced as expected now that the high side outliers are removed.  The remaining analysis will be performed on the reduced data set with these outlier observations removed, reducing the number of observations to 1329 from the original 1599, an appoximately 17% reduction in the number of observations.
+
+
+```{r}
+dim(wines)
+```
+
+
+
+```{r}
+ggplot(data = wines)+
+  geom_histogram(aes(quality), colour = 'blue', fill = 'white', binwidth = 1)
 
 ```
 
 
-Since this approach of going through the variables one at a time with histograms, and then two at a time with scatterplots is a bit tedious, an appeal to ggpairs and/or ggvis will give this same information with much less code and time spent.  However, ggvis will not output a dynamic plot to the `knit' html file, so it is just for my exploratory data analysis use in looking for variables that trend together.
+An interesting note on the distribution of quality is that no wine is given a score of 0,1,2,9 or 10.  The data is clustered in the middle of the range for possible quality scores.
 
-```{r, echo=FALSE, warning=FALSE}
 
-ggpairs(data=wines, columns=c(1:5))
+# Bivariate, Multivariate Data Exploration and a Predictive Model
+
+
+Just to get an idea about how some of the features are distributed pair-wise, a The collection of plots below gives us an idea of how several pairs of variables may be related and histograms of those variables.
+
+```{r, fig.width = 15, fig.height = 12}
+
+scatterplotMatrix(~citric.acid + alcohol + residual.sugar + fixed.acidity + volatile.acidity, data = wines)
 
 ```
 
 
-From the ggpairs, the citric.acid and fixed.acidity variables look like they may have some non-zero correlation.  To get an overall correlation matrix:
+For the scatter plot matrix, a subset of features (citric.acid, alcohol, pH, fixed.acidity, density) were chosen.  While many of the plots  do not show much of a correlation between pairs of variables there are a few that stand out as potentially having a stastically significant correlation.  These include:  pH & citric.acid (row 1, column 3), fixed.acidity & citric.acid (row 1, column 4), pH & fixed.acidity (row 3, column 4), fixed.acidity & density (row 4, column 5).  A more thorough investigation will be included in section 2 of at least one of these relationshsips.
+
+One of the original questions I had was if the distributions of a single feature conditioned on quality score were different then that might mean that feature is well correlated to quality and may aid in developing a predictive model.  So, conditioning the previous density plots on quality will yield the univariate distributions that I am interested in.
+
+
+```{r, fig.height = 2, fig.width = 3}
+g <- ggplot(data = wines) + scale_color_brewer(type = 'seq') +
+  labs(colour = "Quality")
+g + geom_density(aes(citric.acid, color = as.factor(quality))) 
+g + geom_density(aes(alcohol, color = as.factor(quality)))
+g + geom_density(aes(residual.sugar, color = as.factor(quality))) 
+g + geom_density(aes(fixed.acidity, color = as.factor(quality)))
+g + geom_density(aes(volatile.acidity, color = as.factor(quality)))
+```
+
+The univariate distributions of the variables citric.acid, alcohol, fixed.acidity, and volatile.acidity do show a significant difference in the distributions conditioned on quality score. When creating the predictive model, it will probably be a subset of these features that is used.  The residual.sugar distributions do not show much variation between the different quality scores.
+
+
+
+
+
+
+
+
 
 ```{r}
 cor_matrix <- cor(wines)
@@ -89,41 +267,93 @@ round(cor_matrix, 3)
 
 ```
 
-This is a lot of information to have in numeric format so a visual representation could help.
+The correlation matrix has usefule information but is not always simple to pick out.  This is a lot of information to have in numeric format so a visual representation could help.
+
+
 ```{r}
 corrplot(cor_matrix, type = "upper", order = "hclust", tl.col="black", diag = FALSE, tl.cex = 0.8, tl.pos = "upper")
 ```
 
+
 The variables that are more highly correlated are represented by larger circles such as the citric.acid and fixed.acidity variables have a larger positive correlation, that looking back at the correlation matrix is approximately 0.672.  This will be looked at in some depth later.
 
-First, a ggvis dynamic plot to sort through visually how some of the variables are related to the quality rating.
+First, another look at how some of the variables are related to the quality rating.
 
 ```{r}
-wines %>% ggvis(x=input_select(c('alcohol','fixed.acidity','volatile.acidity','citric.acid','residual.sugar','chlorides','free.sulfur.dioxide','total.sulfur.dioxide'), map=as.name)) %>% layer_points(y=~quality)
-
-```
-From the ggvis plots one could see that there is a slight tendency for alcohol and quality to increase together.  From the correlation matrix this can be seen as their correlation is approximately 0.476.
-
-
-Eventhough, alcohol and residual.sugar do not appear to have much correlation, the plot below breaks down the alcohol vs residual.sugar by the quality rating.
-
-```{r, warning=FALSE}
-ggplot(data=wines)+
-  geom_jitter(aes(x=alcohol, y=residual.sugar, color=factor(quality)), alpha=0.5)
-
+p1 <- ggplot(data = wines, aes(factor(quality), alcohol)) +
+  geom_boxplot(color = "blue")+
+  geom_jitter(alpha = 0.1)+
+  stat_summary(fun.y = "mean",
+               geom = "point", 
+               color = "green", 
+               shape = 8,
+               size = 4)
 ```
 
-So it does appear that those wines with both lower residual.sugar and alcohol tend to have a middle quality rating as is illustrated by the large cluster of quality = 5 points in the lower left of the plot.
+```{r}
+p2 <- ggplot(data = wines, aes(factor(quality), citric.acid)) +
+  geom_boxplot(color = "blue")+
+  geom_jitter(alpha = 0.1)+
+  stat_summary(fun.y = "mean",
+               geom = "point", 
+               color = "green", 
+               shape = 8,
+               size = 4)
+```
+
+```{r}
+p3 <- ggplot(data = wines, aes(factor(quality), volatile.acidity)) +
+  geom_boxplot(color = "blue")+
+  geom_jitter(alpha = 0.1)+
+  stat_summary(fun.y = "mean",
+               geom = "point", 
+               color = "green", 
+               shape = 8,
+               size = 4)
+```
+
+
+```{r}
+p4 <- ggplot(data = wines, aes(factor(quality), sulphates)) +
+  geom_boxplot(color = "blue")+
+  geom_jitter(alpha = 0.1)+
+  stat_summary(fun.y = "mean",
+               geom = "point", 
+               color = "green", 
+               shape = 8,
+               size = 4)
+```
+
+```{r}
+grid.arrange(p1, p2, p3, p4, ncol = 2, nrow = 2)
+```
+
+One can see that there is a slight tendency for alcohol and quality to increase together.  From the correlation matrix this can be seen as their correlation is the largest for any pairing with quality at approximately 0.476.  Similarly, sulphates and quality are positively correlated and it should be noted that in general the sulphates values have a relatively small variance as can be gleened from the clustering of points around 0.5 to 0.8 and that there are some noticable outliers that are many IQRs from the median especially at the quality scores of 5 and 6.
+
+The volatile.acidity feature appears to have an overall negative impact on the quality rating as is evidenced by the trend of decreasing average and median volatile.acidity for increasing quality and a correlation value of -0.391.
 
 
 
-```{r, warning=FALSE}
-ggplot(data=wines)+
-  geom_point(aes(x=fixed.acidity, y=citric.acid, color=factor(quality)), alpha=0.5)
+```{r}
+ggplot(data=wines, aes(x = fixed.acidity, y = citric.acid, color = factor(quality))) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm", se = FALSE) +
+  scale_color_brewer(type = 'seq',
+                     guide = guide_legend(title = "Quality"))
 
 ```
 
-In the above plot, there appears to be a positive correlation between fixed.acidity and citric.acid.  Looking at the definition of the variables:
+```{r}
+correl <- cor(wines$citric.acid, wines$fixed.acidity)
+
+gd <- wines %>% 
+  group_by(quality) %>%
+  summarise(corr_citric.acid_fixed.acidity = cor(citric.acid, fixed.acidity), n = n())
+
+print(gd)
+```
+
+From the scatterplot matrix, there appeared to be a positive correlation between fixed.acidity and citric.acid.  From the correlation matrix this is quantified as a correlation of 0.661, which is rather strong. The scatterplot and regression lines for fixed.acidity vs. citric.acid show a positive relationship between the two variables exists at each quality rating.  Grouped by quality rating, the correlations between citric.acid and fixed.acidity vary between 0.524 and 0.994.  With only few data points at quality scores of 3 and 8 the correlation values can be misleading.  But, where the bulk of the data is (quality score of 4-7) the correlations are still rather high.  Looking at the definition of the variables may shed some light as to why this correlation is so large:
 
 fixed acidity: most acids involved with wine or fixed or nonvolatile (do not evaporate readily)
 
@@ -131,52 +361,61 @@ citric acid: found in small quantities, citric acid can add 'freshness' and flav
 
 As citric acid is considered non-volatile acid  (<a href>https://www.ams.usda.gov/sites/default/files/media/Citric%20Acid%20TR%202015.pdf</a>) it would make sense that fixed.acidity would increase as citric.acid increases since citric.acid is non-volatile and hence a component of the fixed.acidity measurement.
 
-Since the description of the citric acid variable lends one to probably guess that since citric.acid can add freshness and flavor then it might lead to a higher quality rating for the wine.  So a quick scatter plot of citric.acid vs quality can help illuminate that possiblity:
-
-```{r, warning=FALSE}
-ggplot(data=wines)+
-  geom_jitter(aes(x=quality, y=citric.acid), alpha=0.3)
-
-```
-
-Since that is not completely helpful a boxplot might give a better idea.
+Since the description of the citric acid variable lends one to probably guess that since citric.acid can add freshness and flavor then it might lead to a higher quality rating for the wine.  An enlargement of a previous plot may show this.
 
 ```{r}
-ggplot(data=group_by(wines, quality))+
-  geom_boxplot(aes(x=quality, y=citric.acid, group = cut_width(quality, 01)), color='red')+
-  geom_jitter(aes(x=quality, y=citric.acid), alpha=0.1)
-
-```
-So there does appear to be an overall trend that the higher quality wines have a higher citric.acid content.  However, the data is rather limitted at the lowest and highest values for quality so a definitive conclusion is with-held.
-
-
-```{r, warning=FALSE}
-ggplot(data=wines)+
-  geom_jitter(aes(x=alcohol, y=residual.sugar, color=factor(quality)), alpha=0.5)+
-  scale_y_log10()
-
+ggplot(data = wines, aes(factor(quality), citric.acid)) +
+  geom_boxplot(color = "blue")+
+  geom_jitter(alpha = 0.1)+
+  stat_summary(fun.y = "mean",
+               geom = "point", 
+               color = "green", 
+               shape = 8,
+               size = 4)
 ```
 
-```{r, warning=FALSE}
-ggplot(data=subset(wines, quality>6))+
-  geom_jitter(aes(x=alcohol, y=residual.sugar, color=factor(quality)), alpha=0.5)+
-  scale_y_log10()
+There does appear to be an overall trend that the higher quality wines have a higher citric.acid content as noted previously.  However, the data is rather limitted at the lowest and highest values for quality scores so a definitive conclusion is with-held.
 
-```
 
-```{r, warning=FALSE}
-ggplot(data=subset(wines, quality <= 5))+
-  geom_jitter(aes(x=alcohol, y=residual.sugar, color=factor(quality)), alpha=0.5)+
-  scale_y_log10()
 
-```
 
-It appears that the wines with the lower ratings are clustered toward the low end of the percent alcohol by volume measurement.  To see if there really is a difference will just perform a quick summary of the data on the subsets if the data are partitioned into lower quality and higher quality (less than 6, or greater than or equal to 6 respectively).
+
+
+Since alcohol is the by product of a process that starts with sugar, it could be interesting to see if as residual.sugar decreases does alcohol content generally rise?  One potential source of noise in the relationship is that the sugar content before fermentation was not recorded in the data.  It would be better to use the percent change in sugar content in relation to alcohol. For a more in depth look at how alcohol, residual.sugar, and quality are related, a decomposition of the points depicted below into classifications of low (quality score <= 5) and high quality (quality score >= 6) will be done when exploring the data more in depth. First an enlargement of the scatter plot of alcohol and residual sugar.
 
 ```{r}
-summary(subset(wines, quality <=5)$alcohol)
-summary(subset(wines, quality > 6)$alcohol)
+ggplot(data = wines) +
+  geom_point(aes(x = alcohol, y = residual.sugar), alpha = 0.3)
 
+```
+
+It appears that both residual.sugar and alcohol are being measured on a scale with increments of 0.1.  To break down the wine quality score into just two categories: low and hight quality.  To visually get a better idea of the distribution, let's color the points by quality and perturb them creating a multivariate plot conditioned on low vs high quality.
+
+```{r}
+p2 <- ggplot(data = subset(wines, quality >= 6)) +
+  geom_jitter(aes(x = alcohol, y = residual.sugar, color = factor(quality)), alpha = 0.5) +
+  scale_color_brewer(type = 'seq') +
+  scale_y_log10()
+
+
+p3 <- ggplot(data = subset(wines, quality <= 5))+
+  geom_jitter(aes(x = alcohol, y = residual.sugar, color = factor(quality)), alpha = 0.5) +
+    scale_color_brewer(type = 'seq') +
+  scale_y_log10() 
+
+
+grid.arrange(p2,p3, nrow = 2, ncol = 1)
+```
+
+
+It appears that the wines with the lower ratings are clustered toward the low end of the percent alcohol by volume measurement as also noted in the density plot of alcohol conditioned on quality score.  To see if there really is a difference, just perform a quick summary of the data on the subsets if the data are partitioned into lower quality and higher quality (less than 6, or greater than or equal to 6 respectively).
+
+```{r}
+print("Low Quality Summary")
+summary(subset(wines, quality <= 5)$alcohol)
+
+print("High Quality Summary")
+summary(subset(wines, quality >= 6)$alcohol)
 
 ```
 
@@ -189,27 +428,33 @@ ggplot(data = wines)+
   geom_boxplot(aes(x = low_quality, y = alcohol))
 
 ```
-A look at the emperical density function conditioned on whether or not low_quality it TRUE could help with our conclusion of whether or not we think the alchool  level affects the quality rating.
+
+
+The box plots show a significant difference between the alcohol of a low vs high quality wine with the low quality wines scoring lower in general.  A look at the emperical density function conditioned on whether or not low_quality is TRUE could help with our conclusion of whether or not we think the alchool  level affects the quality rating.
 
 
 
 ```{r}
-ggplot(data=wines)+
-  geom_density(aes(x = alcohol, color=low_quality))
+p1 <- ggplot(data = wines)+
+  geom_density(aes(x = alcohol, color = low_quality)) + 
+  labs(title = "Emperical Density", y = "") 
  
-
-```
-```{r}
-ggplot(data=wines)+
-  stat_ecdf(aes(x = alcohol, color=low_quality))+
-  ylab("Cumulative Emperical Probability")
+p2 <- ggplot(data = wines, aes(x = alcohol, color = low_quality))+
+  stat_ecdf() +
+  labs(title = "Cumulative Emperical Probability", y = "")
  
-
+grid.arrange(p1,p2, ncol = 1, nrow = 2)
 ```
 
-And we could even do a simple test for difference of means to see if there is in fact statistical significance between the mean alcohol measurement of each quality category.  
 
-First check sample sizes to see if there are enough data points in each category for running a test of significance:
+
+The probability density functions for alcohol content are significantly different for low vs high quality wines.  Low quality wines show a spike near 7-8% alchol and quickly diminish for higher alcohol while high quality wines are more spread out with a higher number of higher percent alcohol wines falling into the high quality score category.  This observation is reinforced by the cumulative distribution functions as well.
+
+
+
+#### An Hypothesis Test for Low/High Quality Difference of Means
+
+Now, to perform a simple test for difference of means to see if there is in fact statistical significance between the mean alcohol measurement of each quality category.  And, as citric.acid is described as pertaining to "freshness", the same difference of means hypothesis will be performed.  First checking sample sizes to see if there are enough data points in each category for running a test of significance:
 
 
 ```{r}
@@ -218,6 +463,9 @@ count(wines, low_quality)
 ```
 
 So there are plenty of data points in each classification to run a test for difference of means.  Our null hypothesis is that the means are equal: $$H_0: \mu_{lq} = \mu_{hq} \leftrightarrow \mu_{hq} - \mu_{lq} = 0$$ vs the alternative that they are not equal $$ H_1: \mu_{lq} \neq \mu_{hq} \leftrightarrow \mu_{hq} - \mu_{lq} \neq 0$$.
+
+For mean of alcohol between the two groups:
+
 
 ```{r}
 low_q <- subset(wines, low_quality == TRUE)$alcohol
@@ -228,65 +476,183 @@ high_q <- subset(wines, low_quality == FALSE)$alcohol
 t.test(low_q, high_q)
 
 ```
-With a p-value of 2.2e-16, we can clearly conclude that there is a statistically significant difference in alcohol content between the high and low quality wines.  With such a small p-value we can go even further to conclude that high quality wines generally have a higher alcohol content than low quality wines to replace our null hypothesis.
 
-##2. Final Plots and Summary
-
-### A few "polished"" plots.
-
+And for mean of citric.acid between the two groups:
 
 ```{r}
-ggplot(data=wines)+
-  geom_point(aes(x=fixed.acidity, y=citric.acid, color=factor(quality)), alpha=0.5)+
-  stat_smooth(aes(x=fixed.acidity, y=citric.acid))+
-  labs(list(title = "Citric Acid vs Fixed Acidity", x="Fixed Acidity (g/dm^3)",
-            y="Citric Acid (g/dm^3)"))+
-  theme(plot.title = element_text(hjust = 0.5))+
-  scale_colour_discrete(name="Quality")
+low_q <- subset(wines, low_quality == TRUE)$citric.acid
+high_q <- subset(wines, low_quality == FALSE)$citric.acid
+```
+
+```{r}
+t.test(low_q, high_q)
+
+```
+
+With a p-values of less than 2.2e-16 and 5.624e-8 respectively, we can clearly conclude that there is a statistically significant difference in alcohol content and citric.acid content between the high and low quality wines groups.  With such small p-values we can go even further to conclude that high quality wines generally have a higher alcohol content and a higher citric.acid content than low quality wines to replace our null hypotheses.
+
+#### Developing, Analyzing, and Visualizing a Binary Tree Classifier
+
+Since several of the variables have larger magnitude correlation (Alcohol, Sulphates, Total Sulfur Dioxide, and Volatile Acidity), I wonder if a model for the classification of quality could be obtained using a multinomial logistic regression approach?  For this model, however, I have chosen to use a binary classification tree, with the target (labels) being either low quality or high quality.  
+
+The ordering of the quality score within the data appears to not have any pattern so a simple train/test split without shuffling will be done before the model is fit and subsequently tested.  The training data will be approximately 70% of the entire dataset with the remaining left for the testing data.
+
+```{r}
+train_data <- wines[1:930,]
+test_data <- wines[931:1329,]
+
+train_data$quality <- NULL
+```
+
+
+```{r, fig.width = 10, fig.height = 5.5}
+library(partykit)
+bct <- ctree(as.factor(low_quality)~., data = train_data)
+
+plot(bct, gp = gpar(fontsize = 7))
+```
+
+```{r}
+preds <- predict(bct, newdata = test_data)
+
+confusionMatrix(preds, test_data$low_quality)
+```
+
+```{r}
+true_majority <- sum(test_data$low_quality) / length(test_data)
+print(true_majority)
+if(true_majority >= 0.5) {
+  #create logical array for majority classifier
+  preds <- logical(length = length(test_data$low_quality))
+} else {
+  preds <- !logical(length = length(test_data$low_quality))
+}
+
+confusionMatrix(preds, test_data$low_quality)
 
 ```
 
 
+
+The accuracy of the classifier is 73.93% on the test data.  This is rather better than the majority class classifier which would give an accuracy of 56.14%.  Of note is that we eliminated the outliers from the data.  So the model may not be a good predictor on outlier data.
+
+
+
+
+
+# Final Plots: A few "polished" plots.
+
+
 ```{r}
-ggplot(data=group_by(wines, quality))+
-  geom_boxplot(aes(x=quality, y=citric.acid, group = cut_width(quality, 01)), color='red')+
-  geom_jitter(aes(x=quality, y=citric.acid), alpha=0.1)+  
-  labs(list(title = "Citric Acid Content vs. Quality Rating", x="Quality Rating (0-10)", 
-            y="Citric Acid Content (g/dm^3)"), center=TRUE)+
+ggplot(data = group_by(wines, quality)) +
+  geom_boxplot(aes(x = quality, y = citric.acid, group = cut_width(quality, 01)), color = 'blue') +
+  geom_jitter(aes(x = quality, y = citric.acid), alpha = 0.1) +  
+  labs(list(title = "Citric Acid Content vs. Quality Rating", x = "Quality Rating (0-10)", 
+            y = "Citric Acid Content (g/dm^3)"), center = TRUE)+
   theme(plot.title = element_text(hjust = 0.5))
 
 ```
 
 
+From the overlay of jittered data points on the box plot of Quality Rating vs. Citric Acid Content it can be seen that there are few values at a quality score of 3,4 or 8 with the bulk of the data in scores of 5,6.  Even with few data points near the ends  of the quality score, it can be observed that the central 50% and the median of Citric Acid are both generally increasing as quality score increases. The general increase in median/mean of citric acid for increasing quality score can be more easily observed if the data is split between low and high quality. Splitting the data on quality score of low (0-5) vs high (6-10) the subsets have mean citric acid values of 0.2196 g/dm^3 and 0.2730 g/dm^3 respectively.  The two groups have a statistically significant difference in mean citric acid values (using Welch two sample t-test).
 
 
-```{r, warning=FALSE}
-a <- ggplot(data=subset(wines, quality>=6))+
-  geom_jitter(aes(x=alcohol, y=residual.sugar, color=factor(quality)), alpha=0.5)+
-  ylim(1,10)+
-  xlim(8,15)+
-  labs(list(title = "High Quality", x="Alcohol (%)", y="Residual Sugar (g/dm^3)"))+
+
+```{r}
+ca_a_cor <- wines %>% group_by(quality) %>% summarize(COR = cor(citric.acid, alcohol))
+ca_a_cor <- round(ca_a_cor, 5)
+```
+
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE, fig.width = 8, fig.height = 6}
+gd <- wines %>% 
+  group_by(quality) %>%
+  summarise(citric.acid = mean(citric.acid), alcohol = mean(alcohol))
+
+
+ggplot(data = wines, aes(x = citric.acid, y = alcohol))+
+  geom_point(alpha = 0.3)+
+  geom_smooth(method = "lm", se = FALSE)+
+  geom_point(data = gd, color = 'green', size = 3)+
+  labs(list(title = "Citric Acid vs Alcohol by Quality Score", y = "Alcohol (% by volume)",
+            x = "Citric Acid (g/dm^3)"))+
   theme(plot.title = element_text(hjust = 0.5))+
-  scale_colour_discrete(name="Quality")
-
-
-
-b <- ggplot(data=subset(wines, quality <= 5))+
-  geom_jitter(aes(x=alcohol, y=residual.sugar, color=factor(quality)), alpha=0.5)+
-  ylim(1,10)+
-  xlim(8,15)+
-  labs(list(title = "Low Quality", x="Alcohol (%)", y="Residual Sugar (g/dm^3)"))+
-  theme(plot.title = element_text(hjust = 0.5))+
-  scale_colour_discrete(name="Quality")
-
-grid.arrange(a,b,ncol=1)
+  #scale_colour_discrete(name = "Quality")+
+  geom_text(data = ca_a_cor, aes(label = paste("cor=", COR)), 
+            x = -Inf, y = Inf, hjust = -0.2, vjust = 1.2)+
+  
+  facet_wrap(~quality)
 
 ```
 
 
 
-## 3. Reflection
+It can be observed from the scatterplots of citric.acid vs alcohol conditioned on quality score that as the quality score is increased there is an accompanying general increase in both citric.acid and alcohol.  The mean-mean points are plotted (green) to look for an overall trend in the center of the data.  What is noticed is an overall movement to the right and up as quality increases.  This reinforces our previous hypothesis that as alcohol and citric.acid increase there is an increase in quality score.  To extract this pattern a single scatter of mean-mean points colored by quality score is included and again agrees with the hypothesis (in general).  We can also observe that within each quality score value the data does not show much of a correlation between citric.acid and alcohol. The higher correlation values for quality scores of 3 and 8 can most likely be attributed to a lack of data.  With a very small set of data the correlation may not be representative of the true relationship between citric.acid and alcohol. 
 
 
 
-The red wines data set was already clean and was not missing any values so was an easier data set to explore.  Overall, only a few relationships have been explored.  I was looking for variables that appeared to be correlated and so focused on just a few that appeared to be less than randomly related.  There are still many pairs or triples of variables that have not been check for a relationship.  Overall, I was looking for a variable that the 'quality' rating was highly correlated with so that after this analysis, a predictive model could be developed for predicting a quality score based on a subset of the features of the wines.  This model is what I would continue with next, probably first with a basic logistic regression with multiple output categories developed in a supervised learning algorithm.  
+```{r}
+
+
+ggplot(data = wines) +
+  geom_point(aes(x = fixed.acidity, y = citric.acid, color = factor(quality)), alpha = 0.2) +
+  stat_smooth(method = 'lm', se = FALSE, aes(x = fixed.acidity, y = citric.acid)) +
+  labs(list(title = "Citric Acid vs Fixed Acidity", x = "Fixed Acidity (g/dm^3)",
+            y = "Citric Acid (g/dm^3)"))+
+  scale_color_brewer(type = 'seq',
+                     guide = guide_legend(title = "Quality")) +
+  theme_dark() +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  geom_text(data = ca_a_cor, aes(label = paste("cor=", round(correl,3))), 
+            x = -Inf, y = Inf, hjust = -0.2, vjust = 1.2)
+
+```
+
+
+
+Initially in the data exploration, there appeared to be a positive correlation between fixed.acidity and citric.acid.  From the correlation matrix this is quantified as a correlation of 0.661, which is rather strong. Grouped by quality rating, the correlations between citric.acid and fixed.acidity vary between 0.524 and 0.994.  With only a few data points at quality scores of 3 and 8 the correlation values can be misleading.  But, where the bulk of the data is (quality score of 4-7) the correlations are still rather high.  This is most likely due to citric acid being a non-volatile acid and hence is one of the acids that is counted in the fixed acidity value.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# 3. Reflection
+
+
+
+The red wines data set was already clean and was not missing any values so was an easier data set to explore.  So I did not have any trouble with cleaning the data as it was unnecessary.  The analysis was logically conducted starting with univariate exploration and, with the intention of model development, visual selection of potential features that could be good to use.  
+
+
+One trouble I did have during the project was simply getting the format of the submission correct.  Another was that the syntax of the ggplot library is a little cumbersome and not always one that one can guess intuitively to accomplish a task.  For instance changing the text on a legend for a plot is not intuitive, at least not the way I went about it.
+
+The decision to drop the outliers from the dataset has affected the analysis.  Nearly 1 in 5 data points was removed from the set.  This has eliminated a large proportion of the data.  Eventhough there was sufficient data left to create a predictive model, the model has not been validated on the larger set.  So a future direction could be to see how the created decision tree model performs on the entire set.
+
+
+Overall, I was looking for one or more variables that the quality rating was highly correlated with so that  a predictive model could be developed for predicting whether a quality was low or high.  To this end the development was successful, as it resulted in a model that could predict (on the test data) whether a wine would have a quality score of below 6 vs at or above 6 with an accuracy of about 74%. To improve the fit, a random forest approach could be used to potentially increase the accuracy.  
+
+Another potential next step would be to see if an accurate model could be developed to predict the actual quality score (0-10) from the other features.  A potential model could be a multinomial logistic regression with multiple classes.
+
+
+
+## References
+Davies TM. The book of R: a first course in programming and statistics. San Francisco: No Starch Press; 2016.
+
+robk@statmethods.net RK-. Scatterplots. Quick-R: Scatterplots. http://www.statmethods.net/graphs/scatterplot.html. Accessed April 7, 2017.
+
+How to perform a Logistic Regression in R. R-bloggers. https://www.r-bloggers.com/how-to-perform-a-logistic-regression-in-r/. Published September 13, 2015. Accessed April 7, 2017.
+
+changing font size in regression tree plot - Stack Overflow. http://stackoverflow.com/questions/37103734/changing-font-size-in-regression-tree-plot. Accessed April 7, 2017.
+
+
+ctree (party) changing font sizes in plots. R help - ctree (party) changing font sizes in plots. http://r.789695.n4.nabble.com/ctree-party-changing-font-sizes-in-plots-td907947.html. Accessed April 7, 2017.
+
+
